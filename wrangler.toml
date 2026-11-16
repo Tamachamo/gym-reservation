@@ -5,4 +5,4 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "gym-reservation-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+database_id = "eb90f5ba-b420-4a00-9ec9-229d31cfd3ef"
