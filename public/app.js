@@ -6,6 +6,13 @@ const state = {
   guestMode: "guest", // 'guest' | 'login'
 };
 
+// 料金区分定義
+const SLOTS = {
+  morning: { label: "午前", start: "09:00", end: "12:00", sMin: 9 * 60, eMin: 12 * 60, fee: 2000 },
+  afternoon: { label: "午後", start: "13:00", end: "17:00", sMin: 13 * 60, eMin: 17 * 60, fee: 2000 },
+  night: { label: "夜間", start: "18:00", end: "22:00", sMin: 18 * 60, eMin: 22 * 60, fee: 3000 },
+};
+
 function formatDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -24,32 +31,50 @@ function timeToMinutes(t) {
   return h * 60 + m;
 }
 
-// 料金計算（区分一致 + 区分またぎ・30分単位計算）
+// 区分かぶり判定による料金計算（少しでも重なればその区分の料金を合算）
 function calculateFee(startTime, endTime) {
   const s = timeToMinutes(startTime);
   const e = timeToMinutes(endTime);
-  if (e <= s) return { fee: 0, note: "終了時間は開始時間より後に設定してください" };
+  if (e <= s) {
+    return { fee: 0, note: "終了時間は開始時間より後に設定してください", matched: [] };
+  }
 
-  // 規定区分への完全一致
-  if (startTime === "09:00" && endTime === "12:00") return { fee: 2000, note: "午前区分（9:00〜12:00）" };
-  if (startTime === "13:00" && endTime === "17:00") return { fee: 2000, note: "午後区分（13:00〜17:00）" };
-  if (startTime === "18:00" && endTime === "22:00") return { fee: 3000, note: "夜間区分（18:00〜22:00）" };
-  if (startTime === "09:00" && endTime === "22:00") return { fee: 7000, note: "終日パック（9:00〜22:00）" };
-
-  // 区分ごとの時間帯重複割合に基づく計算（30分刻み対応）
-  // 午前(9-12: 3h=2000円), 午後(13-17: 4h=2000円), 夜間(18-22: 4h=3000円), 昼休憩/夕方休憩枠は前後単価準拠
+  const matched = [];
   let total = 0;
-  for (let t = s; t < e; t += 30) {
-    if (t < 12 * 60 + 30) {
-      total += 2000 / 6; // 午前枠単価 (3時間6コマ=2000円)
-    } else if (t < 17 * 60 + 30) {
-      total += 2000 / 8; // 午後枠単価 (4時間8コマ=2000円)
-    } else {
-      total += 3000 / 8; // 夜間枠単価 (4時間8コマ=3000円)
+
+  // 各区分 [sMin, eMin] と選択範囲 [s, e] が少しでも重なるか判定 (s < eMin && e > sMin)
+  for (const [key, slot] of Object.entries(SLOTS)) {
+    if (s < slot.eMin && e > slot.sMin) {
+      matched.push(key);
+      total += slot.fee;
     }
   }
-  const rounded = Math.min(7000, Math.round(total / 10) * 10);
-  return { fee: rounded, note: `時間指定計算（${(e - s) / 60}時間利用）` };
+
+  if (matched.length === 0) {
+    return {
+      fee: 0,
+      note: "※利用区分（9:00-12:00 / 13:00-17:00 / 18:00-22:00）を含む時間帯を指定してください",
+      matched: [],
+    };
+  }
+
+  if (matched.length === 3) {
+    return {
+      fee: 7000,
+      note: "適用区分：終日（午前＋午後＋夜間）",
+      matched,
+    };
+  }
+
+  const breakdownText = matched
+    .map((k) => `${SLOTS[k].label}(${SLOTS[k].fee.toLocaleString()}円)`)
+    .join(" ＋ ");
+
+  return {
+    fee: total,
+    note: `適用区分：${breakdownText}`,
+    matched,
+  };
 }
 
 // 30分刻みセレクトボックス生成（09:00〜22:00）
@@ -68,15 +93,65 @@ function initTimeSelects() {
   }
   startSel.value = "09:00";
   endSel.value = "12:00";
-  updateFeeDisplay();
+  updateFeeAndPresetUI();
 }
 
-function updateFeeDisplay() {
+// 料金表示とクイック選択ボタンのハイライト同期
+function updateFeeAndPresetUI() {
   const s = document.getElementById("book-start-time").value;
   const e = document.getElementById("book-end-time").value;
-  const { fee, note } = calculateFee(s, e);
+  const { fee, note, matched } = calculateFee(s, e);
+
   document.getElementById("calculated-fee").textContent = `${fee.toLocaleString()} 円`;
   document.getElementById("fee-breakdown").textContent = note;
+
+  // ボタンのアクティブ状態を現在の該当区分に合わせる
+  document.querySelectorAll(".btn-preset").forEach((btn) => {
+    const slotKey = btn.dataset.slot;
+    if (slotKey === "all") {
+      btn.classList.toggle("active", matched.length === 3);
+    } else {
+      btn.classList.toggle("active", matched.includes(slotKey));
+    }
+  });
+}
+
+// クイック選択ボタン（複数選択トグル）のクリック処理
+function handlePresetToggle(clickedSlot) {
+  const s = document.getElementById("book-start-time").value;
+  const e = document.getElementById("book-end-time").value;
+  const { matched } = calculateFee(s, e);
+  const selectedSet = new Set(matched);
+
+  if (clickedSlot === "all") {
+    // 終日ボタン：既に3区分すべて選択中なら午前のみに戻す、そうでなければ全選択
+    if (selectedSet.size === 3) {
+      selectedSet.clear();
+      selectedSet.add("morning");
+    } else {
+      selectedSet.add("morning");
+      selectedSet.add("afternoon");
+      selectedSet.add("night");
+    }
+  } else {
+    // 午前・午後・夜間のトグル（最低1つは残す）
+    if (selectedSet.has(clickedSlot)) {
+      if (selectedSet.size > 1) {
+        selectedSet.delete(clickedSlot);
+      }
+    } else {
+      selectedSet.add(clickedSlot);
+    }
+  }
+
+  // 選択された区分の最も早い開始時間と最も遅い終了時間をセット
+  const activeSlots = Array.from(selectedSet).map((k) => SLOTS[k]);
+  const minStart = activeSlots.reduce((min, cur) => (cur.sMin < min.sMin ? cur : min), activeSlots[0]);
+  const maxEnd = activeSlots.reduce((max, cur) => (cur.eMin > max.eMin ? cur : max), activeSlots[0]);
+
+  document.getElementById("book-start-time").value = minStart.start;
+  document.getElementById("book-end-time").value = maxEnd.end;
+  updateFeeAndPresetUI();
 }
 
 // API通信: 月間予約取得
@@ -183,6 +258,7 @@ function renderSelectedDayDetail() {
 function openBookingModal(dateStr) {
   document.getElementById("book-date").value = dateStr || state.selectedDateStr;
   document.getElementById("booking-error").classList.add("hidden");
+  updateFeeAndPresetUI();
 
   if (state.user) {
     document.getElementById("logged-in-applicant-box").classList.remove("hidden");
@@ -293,16 +369,14 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("close-booking-modal").addEventListener("click", closeBookingModal);
   document.getElementById("cancel-booking-btn").addEventListener("click", closeBookingModal);
 
-  // 時間・料金プリセット
+  // 時間・料金プリセット（複数選択トグル）
   document.querySelectorAll(".btn-preset").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.getElementById("book-start-time").value = btn.dataset.start;
-      document.getElementById("book-end-time").value = btn.dataset.end;
-      updateFeeDisplay();
+      handlePresetToggle(btn.dataset.slot);
     });
   });
-  document.getElementById("book-start-time").addEventListener("change", updateFeeDisplay);
-  document.getElementById("book-end-time").addEventListener("change", updateFeeDisplay);
+  document.getElementById("book-start-time").addEventListener("change", updateFeeAndPresetUI);
+  document.getElementById("book-end-time").addEventListener("change", updateFeeAndPresetUI);
 
   // モーダル内のゲスト / ログイン切替
   document.querySelectorAll("#guest-or-login-box .tab-btn").forEach((btn) => {
@@ -329,10 +403,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const reservation_date = document.getElementById("book-date").value;
     const start_time = document.getElementById("book-start-time").value;
     const end_time = document.getElementById("book-end-time").value;
-    const { fee } = calculateFee(start_time, end_time);
+    const { fee, note } = calculateFee(start_time, end_time);
 
     if (fee <= 0) {
-      errEl.textContent = "終了時間は開始時間より後に設定してください。";
+      errEl.textContent = note;
       errEl.classList.remove("hidden");
       return;
     }
@@ -342,7 +416,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // 未ログイン時の処理
     if (!applicant) {
       if (state.guestMode === "login") {
-        // モーダル内でログインしてそのまま予約
         const email = document.getElementById("modal-login-email").value;
         const password = document.getElementById("modal-login-password").value;
         const loginRes = await fetch("/api/auth", {
@@ -360,7 +433,6 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("gym_user", JSON.stringify(state.user));
         applicant = state.user;
       } else {
-        // ログインせずに予約（同時アカウント登録オプションあり）
         const name = document.getElementById("guest-name").value.trim();
         const organization = document.getElementById("guest-org").value.trim() || "個人";
         const email = document.getElementById("guest-email").value.trim();
