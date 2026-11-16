@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>体育館予約申し込みシステム</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <h1 class="logo" id="nav-top">体育館予約システム</h1>
+      <nav class="header-nav">
+        <button type="button" class="btn-nav active" id="btn-view-calendar">予約カレンダー</button>
+        <button type="button" class="btn-nav" id="btn-view-mypage">マイページ</button>
+        <button type="button" class="btn-outline" id="btn-header-auth">ログイン</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- TOP: カレンダービュー -->
+    <section id="view-calendar" class="view-section active">
+      <div class="info-banner">
+        <div class="fee-guide">
+          <strong>【利用料金案内】</strong>
+          <span>9:00〜12:00：2,000円</span> /
+          <span>13:00〜17:00：2,000円</span> /
+          <span>18:00〜22:00：3,000円</span> /
+          <span>9:00〜22:00（終日）：7,000円</span>
+        </div>
+        <div class="legend">
+          <span class="legend-item"><i class="dot morning"></i>午前</span>
+          <span class="legend-item"><i class="dot afternoon"></i>午後</span>
+          <span class="legend-item"><i class="dot night"></i>夜間</span>
+        </div>
+      </div>
+
+      <div class="calendar-controls">
+        <button type="button" class="btn-icon" id="prev-month" aria-label="前月">◀</button>
+        <h2 id="current-month-label">2026年 11月</h2>
+        <button type="button" class="btn-icon" id="next-month" aria-label="翌月">▶</button>
+        <button type="button" class="btn-small" id="today-btn">今月</button>
+      </div>
+
+      <div class="calendar-wrapper">
+        <div class="calendar-weekdays">
+          <div class="sun">日</div>
+          <div>月</div>
+          <div>火</div>
+          <div>水</div>
+          <div>木</div>
+          <div>金</div>
+          <div class="sat">土</div>
+        </div>
+        <div id="calendar-grid" class="calendar-grid"></div>
+      </div>
+
+      <!-- 選択日の詳細タイムライン（スマホでも見やすい30分刻み一覧） -->
+      <div class="day-detail-card" id="day-detail-card">
+        <div class="day-detail-header">
+          <h3 id="selected-date-title">日付を選択してください</h3>
+          <button type="button" class="btn-primary btn-sm" id="btn-open-modal-selected">＋ この日を予約</button>
+        </div>
+        <div id="day-timeline" class="day-timeline"></div>
+      </div>
+    </section>
+
+    <!-- マイページビュー -->
+    <section id="view-mypage" class="view-section">
+      <div id="mypage-guest-notice" class="card text-center">
+        <p>マイページを利用するにはログインしてください。</p>
+        <button type="button" class="btn-primary" id="btn-mypage-login">ログイン / 新規登録</button>
+      </div>
+
+      <div id="mypage-content" class="hidden">
+        <div class="mypage-grid">
+          <div class="card">
+            <h3>申請者アカウント情報</h3>
+            <form id="profile-form" class="form-stack">
+              <label>名前 <span class="req">*</span>
+                <input type="text" id="prof-name" required />
+              </label>
+              <label>団体名（個人の場合は「個人」）
+                <input type="text" id="prof-org" placeholder="個人" />
+              </label>
+              <label>メールアドレス <span class="req">*</span>
+                <input type="email" id="prof-email" required />
+              </label>
+              <label>電話番号 <span class="req">*</span>
+                <input type="tel" id="prof-phone" required />
+              </label>
+              <button type="submit" class="btn-primary">情報を更新する</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>予約履歴・申込状況</h3>
+            <div id="my-reservations-list" class="reservation-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 予約申し込みモーダル -->
+  <div id="booking-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>体育館 予約申し込み</h3>
+        <button type="button" class="modal-close" id="close-booking-modal">&times;</button>
+      </div>
+
+      <form id="booking-form" class="modal-body">
+        <!-- Step 1: 日付・時間・利用者入力 -->
+        <div id="booking-step-1">
+          <div class="form-group">
+            <label>予約日 <span class="req">*</span>
+              <input type="date" id="book-date" required />
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>料金区分クイック選択</label>
+            <div class="preset-buttons">
+              <button type="button" class="btn-preset" data-start="09:00" data-end="12:00">午前 (9:00-12:00)</button>
+              <button type="button" class="btn-preset" data-start="13:00" data-end="17:00">午後 (13:00-17:00)</button>
+              <button type="button" class="btn-preset" data-start="18:00" data-end="22:00">夜間 (18:00-22:00)</button>
+              <button type="button" class="btn-preset" data-start="09:00" data-end="22:00">終日 (9:00-22:00)</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label>開始時間（30分刻み）
+              <select id="book-start-time"></select>
+            </label>
+            <label>終了時間（30分刻み）
+              <select id="book-end-time"></select>
+            </label>
+          </div>
+
+          <div class="fee-box">
+            <span>概算利用料金：</span>
+            <strong id="calculated-fee">0 円</strong>
+            <small id="fee-breakdown" class="fee-note"></small>
+          </div>
+
+          <!-- ログイン済みの場合の表示 -->
+          <div id="logged-in-applicant-box" class="applicant-summary hidden">
+            <p><strong>申請者：</strong><span id="summary-user-name"></span>（<span id="summary-user-org"></span>）</p>
+            <p><strong>連絡先：</strong><span id="summary-user-email"></span> / <span id="summary-user-phone"></span></p>
+          </div>
+
+          <!-- 未ログイン時の入力エリア（ログインして予約 or ログインせずに予約） -->
+          <div id="guest-or-login-box">
+            <div class="auth-choice-tabs">
+              <button type="button" class="tab-btn active" data-mode="guest">ログインせずに予約</button>
+              <button type="button" class="tab-btn" data-mode="login">ログインして予約</button>
+            </div>
+
+            <!-- ゲスト予約フォーム -->
+            <div id="guest-fields" class="form-stack">
+              <label>名前 <span class="req">*</span>
+                <input type="text" id="guest-name" placeholder="山田 太郎" />
+              </label>
+              <label>団体名（個人の場合は空欄または「個人」）
+                <input type="text" id="guest-org" placeholder="個人" />
+              </label>
+              <label>メールアドレス <span class="req">*</span>
+                <input type="email" id="guest-email" placeholder="yamada@example.com" />
+              </label>
+              <label>電話番号 <span class="req">*</span>
+                <input type="tel" id="guest-phone" placeholder="090-1234-5678" />
+              </label>
+
+              <label class="checkbox-label">
+                <input type="checkbox" id="guest-register-check" />
+                同時にアカウント登録する（マイページが利用可能になります）
+              </label>
+
+              <div id="guest-password-wrap" class="hidden">
+                <label>パスワード設定 <span class="req">*</span>
+                  <input type="password" id="guest-password" placeholder="6文字以上のパスワード" />
+                </label>
+              </div>
+            </div>
+
+            <!-- モーダル内ログインフォーム -->
+            <div id="modal-login-fields" class="form-stack hidden">
+              <label>メールアドレス <span class="req">*</span>
+                <input type="email" id="modal-login-email" />
+              </label>
+              <label>パスワード <span class="req">*</span>
+                <input type="password" id="modal-login-password" />
+              </label>
+            </div>
+          </div>
+
+          <p id="booking-error" class="error-msg hidden"></p>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-outline" id="cancel-booking-btn">キャンセル</button>
+            <button type="submit" class="btn-primary" id="submit-booking-btn">OK（予約を確定する）</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 単体ログイン / 新規登録モーダル -->
+  <div id="auth-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3 id="auth-modal-title">ログイン</h3>
+        <button type="button" class="modal-close" id="close-auth-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="auth-choice-tabs">
+          <button type="button" class="tab-btn active" data-auth-tab="login">ログイン</button>
+          <button type="button" class="tab-btn" data-auth-tab="register">新規アカウント登録</button>
+        </div>
+
+        <form id="standalone-login-form" class="form-stack">
+          <label>メールアドレス
+            <input type="email" id="login-email" required />
+          </label>
+          <label>パスワード
+            <input type="password" id="login-password" required />
+          </label>
+          <p id="auth-error" class="error-msg hidden"></p>
+          <button type="submit" class="btn-primary">ログイン</button>
+        </form>
+
+        <form id="standalone-register-form" class="form-stack hidden">
+          <label>名前 <span class="req">*</span>
+            <input type="text" id="reg-name" required />
+          </label>
+          <label>団体名（個人）
+            <input type="text" id="reg-org" placeholder="個人" />
+          </label>
+          <label>メールアドレス <span class="req">*</span>
+            <input type="email" id="reg-email" required />
+          </label>
+          <label>電話番号 <span class="req">*</span>
+            <input type="tel" id="reg-phone" required />
+          </label>
+          <label>パスワード <span class="req">*</span>
+            <input type="password" id="reg-password" required />
+          </label>
+          <p id="reg-error" class="error-msg hidden"></p>
+          <button type="submit" class="btn-primary">登録してログイン</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
