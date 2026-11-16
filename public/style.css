@@ -218,10 +218,17 @@ input[type="text"], input[type="email"], input[type="tel"], input[type="password
 .btn-preset {
   background: #f1f5f9;
   border: 1px solid var(--border);
-  padding: 0.4rem;
+  padding: 0.45rem;
   font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
 }
 .btn-preset:hover { background: #e2e8f0; }
+.btn-preset.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
 
 .fee-box {
   background: #fefce8;
